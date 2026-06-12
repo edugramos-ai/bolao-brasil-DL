@@ -21,16 +21,16 @@ st.markdown("""
 
 # Coleta segura das credenciais nos Secrets
 try:
-    AIRTABLE_TOKEN = st.secrets["airtable"]["token"]
-    BASE_ID = st.secrets["airtable"]["base_id"]
-    TABLE_ID = st.secrets["airtable"]["table_id"]
+    AIRTABLE_TOKEN = st.secrets["airtable"]["token"].strip()
+    BASE_ID = st.secrets["airtable"]["base_id"].strip()
+    TABLE_ID = st.secrets["airtable"]["table_id"].strip()
     URL = f"https://airtable.com{BASE_ID}/{TABLE_ID}"
     HEADERS = {"Authorization": f"Bearer {AIRTABLE_TOKEN}", "Content-Type": "application/json"}
 except Exception:
-    st.error("❌ Erro: As credenciais do Airtable não foram configuradas corretamente nos Secrets do Streamlit!")
+    st.error("❌ Erro: As credenciais do Airtable não foram configuradas nos Secrets do Streamlit!")
     st.stop()
 
-# Função de leitura com proteção contra quedas e timeouts
+# Função de leitura robusta
 def ler_dados():
     try:
         response = requests.get(URL, headers=HEADERS, timeout=10)
@@ -48,13 +48,10 @@ def ler_dados():
             df["gols_adv"] = pd.to_numeric(df.get("gols_adv", 0), errors='coerce').fillna(0).astype(int)
             df["pontos"] = pd.to_numeric(df.get("pontos", 0), errors='coerce').fillna(0).astype(int)
             return df
-        else:
-            st.warning(f"⚠️ Erro no Airtable (Código {response.status_code}). Revise o Token e IDs nos Secrets.")
     except Exception:
-        st.warning("⚠️ Erro de conexão com o banco de dados. O Airtable pode estar instável ou os IDs estão incorretos.")
+        pass
     return pd.DataFrame(columns=["id", "jogo", "nome", "gols_br", "gols_adv", "jogador_atribuido", "pontos", "acertou_placar_exato", "ganhou_pelo_jogador"])
 
-# Agenda oficial da Fase de Grupos
 JOGOS_OFICIAIS = {
     "1ª Rodada: Brasil x Marrocos": {"confronto": "Brasil x Marrocos"},
     "2ª Rodada: Brasil x Haiti": {"confronto": "Brasil x Haiti"},
@@ -71,7 +68,6 @@ if "jogo_atual" not in st.session_state:
         "placar_real_br": 0, "placar_real_adv": 0, "autor_ultimo_gol": "Ninguém", "status_finalizado": False
     }
 
-# Elenco oficial de linha para o sorteio
 JOGADORES_LINHA = [
     "Alex Sandro", "Bremer", "Danilo", "Douglas Santos", "Gabriel Magalhães", 
     "Ibañez", "Léo Pereira", "Marquinhos", "Wesley", "Bruno Guimarães", 
@@ -107,18 +103,22 @@ with aba_palpites:
                 st.error(f"❌ {nome_limpo}, você já cadastrou um palpite para este jogo!")
             else:
                 jogador_sorteado = random.choice(JOGADORES_LINHA)
-                payload = {"fields": {
+                # Formato de payload corrigido com a chave 'records' exigida pelo Airtable
+                payload = {"records": [{"fields": {
                     "jogo": st.session_state.jogo_atual["confronto"], "nome": nome_limpo,
-                    "gols_br": str(int(gols_br)), "gols_adv": str(int(gols_adv)),
-                    "jogador_atribuido": App_Var if 'App_Var' in locals() else jogador_sorteado, "pontos": "0",
+                    "gols_br": int(gols_br), "gols_adv": int(gols_adv),
+                    "jogador_atribuido": jogador_sorteado, "pontos": 0,
                     "acertou_placar_exato": "False", "ganhou_pelo_jogador": "False"
-                }}
-                res = requests.post(URL, headers=HEADERS, json=payload, timeout=10)
-                if res.status_code == 200:
-                    st.balloons()
-                    st.success(f"✅ {nome_limpo}! Seu jogador da sorte é: {jogador_sorteado}")
-                else:
-                    st.error("❌ Falha ao salvar no banco de dados. Verifique a integração do Airtable.")
+                }}]}
+                try:
+                    res = requests.post(URL, headers=HEADERS, json=payload, timeout=10)
+                    if res.status_code == 200:
+                        st.balloons()
+                        st.success(f"✅ {nome_limpo}! Seu jogador da sorte é: {jogador_sorteado}")
+                    else:
+                        st.error(f"❌ Erro da API (Código {res.status_code}). Revise as colunas do Airtable.")
+                except Exception:
+                    st.error("❌ Falha de rede ao tentar conectar com a API do Airtable.")
 with aba_ranking:
     st.markdown("<h2 style='color: #009c3b;'>🏆 Classificação Geral e Resultados</h2>", unsafe_allow_html=True)
     if st.session_state.jogo_atual["status_finalizado"]:
@@ -184,7 +184,7 @@ with aba_admin:
                         elif (int(row["gols_br"]) > int(row["gols_adv"]) and res_br > res_adv) or (int(row["gols_br"]) < int(row["gols_adv"]) and res_br < res_adv) or (int(row["gols_br"]) == int(row["gols_adv"]) and res_br == res_adv):
                             pt = 10
                         
-                        requests.patch(f"{URL}/{row['id']}", headers=HEADERS, json={"fields": {"pontos": str(pt), "acertou_placar_exato": str(exato)}}, timeout=10)
+                        requests.patch(f"{URL}/{row['id']}", headers=HEADERS, json={"fields": {"pontos": pt, "acertou_placar_exato": str(exato)}}, timeout=10)
                 
                 if len(acertadores_exato) != 1:
                     for idx, row in df_calculo.iterrows():
