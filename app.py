@@ -110,7 +110,6 @@ with aba_palpites:
                     })
                     st.balloons()
                     st.success(f"✅ {nome_limpo}, palpite salvo! Seu jogador da sorte é: **{jogador_sorteado}**")
-
 # ==========================================
 # ABA 2: RANKINGS (RODADA + GERAL)
 # ==========================================
@@ -136,7 +135,7 @@ with aba_ranking:
                 if len(ganhadores_premio) != 1:
                     ganhadores_premio = df_filtrado[df_filtrado['ganhou_pelo_jogador'] == True]
                 
-                if not list(ganhadores_premio.index) == []:
+                if not ganhadores_premio.empty:
                     st.subheader("🥇 Ganhador(es) do Prêmio da Rodada:")
                     for _, g in ganhadores_premio.iterrows():
                         motivo = "Placar Exato!" if g['acertou_placar_exato'] else f"Jogador Decisivo ({g['jogador_atribuido']})!"
@@ -178,6 +177,7 @@ with aba_admin:
             st.caption("Dica: Baixe este arquivo antes de resetar o app ou ao fim de cada rodada.")
         else:
             st.info("Nenhum dado cadastrado para exportar ainda.")
+            
         st.markdown("---")
         
         st.subheader("⚙️ Gerenciar Rodadas")
@@ -208,5 +208,33 @@ with aba_admin:
             
             acertadores_exato = []
             
-            # Cálculo de pontuações
             for p in st.session_state.participantes:
+                if p["jogo"] == st.session_state.jogo_atual["confronto"]:
+                    p["acertou_placar_exato"] = (p["gols_br"] == res_br and p["gols_adv"] == res_adv)
+                    
+                    if p["acertou_placar_exato"]:
+                        p["pontos"] = 25
+                        acertadores_exato.append(p)
+                    elif (p["gols_br"] - p["gols_adv"]) == (res_br - res_adv) and (p["gols_br"] > p["gols_adv"] or p["gols_br"] < p["gols_adv"]):
+                        p["pontos"] = 18
+                    elif (p["gols_br"] > p["gols_adv"] and res_br > res_adv) or (p["gols_br"] < p["gols_adv"] and res_br < res_adv) or (p["gols_br"] == p["gols_adv"] and res_br == res_adv):
+                        p["pontos"] = 10
+                    else:
+                        p["pontos"] = 0
+            
+            if len(acertadores_exato) != 1:
+                for p in st.session_state.participantes:
+                    if p["jogo"] == st.session_state.jogo_atual["confronto"] and p["jogador_atribuido"] == autor_gol:
+                        p["ganhou_pelo_jogador"] = True
+            
+            st.success("🏆 Pontuações calculadas e somadas ao Ranking Geral!")
+            st.rerun()
+            
+        st.markdown("---")
+        if st.button("🚨 Resetar Todo o Aplicativo (Zerar Tudo)"):
+            st.session_state.participantes = []
+            st.session_state.jogo_atual["status_finalizado"] = False
+            st.rerun()
+            
+    elif senha != "":
+        st.error("❌ Senha incorreta.")
