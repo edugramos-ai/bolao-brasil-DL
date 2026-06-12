@@ -56,18 +56,12 @@ if "jogo_atual" not in st.session_state:
 
 # Lista OFICIAL de jogadores de linha convocados por Carlo Ancelotti (Copa 2026)
 JOGADORES_LINHA = [
-    # Defensores (Laterais e Zagueiros)
     "Alex Sandro", "Bremer", "Danilo", "Douglas Santos", 
     "Gabriel Magalhães", "Ibañez", "Léo Pereira", "Marquinhos", "Wesley",
-    
-    # Meio-campistas
     "Bruno Guimarães", "Casemiro", "Danilo Santos", "Fabinho", "Éderson", "Lucas Paquetá",
-    
-    # Atacantes
     "Endrick", "Gabriel Martinelli", "Igor Thiago", "Luiz Henrique", 
     "Matheus Cunha", "Neymar", "Raphinha", "Rayan", "Vini Jr."
 ]
-
 
 # Abas de navegação
 aba_palpites, aba_ranking, aba_admin = st.tabs(["📝 DAR PALPITE", "📊 CLASSIFICAÇÃO", "🔒 ADMINISTRADOR"])
@@ -98,7 +92,6 @@ with aba_palpites:
                 st.error("❌ Por favor, digite o seu nome antes de enviar.")
             else:
                 nome_limpo = nome.strip().title()
-                # Verifica se o jogador já deu palpite neste mesmo jogo específico
                 ja_votou = any(p["nome"] == nome_limpo and p["jogo"] == st.session_state.jogo_atual["confronto"] for p in st.session_state.participantes)
                 
                 if ja_votou:
@@ -124,7 +117,6 @@ with aba_palpites:
 with aba_ranking:
     st.markdown("<h2 style='color: #009c3b;'>🏆 Classificação Geral e Resultados</h2>", unsafe_allow_html=True)
     
-    # Detalhes do placar oficial
     if st.session_state.jogo_atual["status_finalizado"]:
         st.info(f" Placar Final: {st.session_state.jogo_atual['confronto']} "
                 f"({st.session_state.jogo_atual['placar_real_br']} x {st.session_state.jogo_atual['placar_real_adv']}) \n\n"
@@ -135,7 +127,6 @@ with aba_ranking:
     if st.session_state.participantes:
         df = pd.DataFrame(st.session_state.participantes)
         
-        # 1. TABELA DA RODADA ATUAL
         st.markdown("<h4 style='color: #009c3b; margin-top:20px;'>⚽ Palpites da Rodada Ativa</h4>", unsafe_allow_html=True)
         df_filtrado = df[df["jogo"] == st.session_state.jogo_atual["confronto"]]
         
@@ -155,9 +146,7 @@ with aba_ranking:
         else:
             st.write("Sem palpites para o confronto ativo.")
             
-        # 2. TABELA DO RANKING GERAL ACUMULADO
         st.markdown("<h4 style='color: #ffdf00; background-color:#009c3b; padding: 5px 10px; border-radius:4px;'>📈 CLASSIFICAÇÃO GERAL DO TORNEIO (Soma de tudo)</h4>", unsafe_allow_html=True)
-        # Agrupa os participantes pelo nome e soma seus pontos de todas as rodadas
         df_geral = df.groupby("nome")["pontos"].sum().reset_index()
         df_geral.columns = ["Nome do Participante", "Pontos Totais Acumulados"]
         
@@ -174,8 +163,25 @@ with aba_admin:
     
     if senha == "brasil2026":
         st.success("Acesso autorizado!")
-        st.subheader("⚙️ Gerenciar Rodadas")
         
+        # --- NOVO BLOCO: SISTEMA DE BACKUP ---
+        st.subheader("💾 Backup de Segurança")
+        if st.session_state.participantes:
+            df_backup = pd.DataFrame(st.session_state.participantes)
+            csv = df_backup.to_csv(index=False).encode('utf-8-sig')
+            
+            st.download_button(
+                label="📥 Baixar Planilha de Palpites (CSV)",
+                data=csv,
+                file_name="backup_bolao_brasil_2026.csv",
+                mime="text/csv",
+            )
+            st.caption("Dica: Baixe este arquivo antes de resetar o app ou ao fim de cada rodada.")
+        else:
+            st.info("Nenhum dado cadastrado para exportar ainda.")
+        st.markdown("---")
+        
+        st.subheader("⚙️ Gerenciar Rodadas")
         escolha_jogo = st.selectbox("Ativar qual jogo no sistema?", list(JOGOS_OFICIAIS.keys()), index=list(JOGOS_OFICIAIS.keys()).index(st.session_state.jogo_selecionado_chave))
         confronto_final = JOGOS_OFICIAIS[escolha_jogo]["confronto"]
         
@@ -203,11 +209,5 @@ with aba_admin:
             
             acertadores_exato = []
             
-            # Atualiza os pontos somente do jogo atual no histórico geral
             for p in st.session_state.participantes:
-                if p["jogo"] == st.session_state.jogo_atual["confronto"]:
-                    p["acertou_placar_exato"] = (p["gols_br"] == res_br and p["gols_adv"] == res_adv)
-                    
-                    if p["acertou_placar_exato"]:
-                        p["pontos"] = 25
-                        acertadores_exato.append(p)
+
