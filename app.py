@@ -103,7 +103,7 @@ with aba_palpites:
                         "nome": nome_limpo,
                         "gols_br": gols_br,
                         "gols_adv": gols_adv,
-                        "jogador_atribuido": App_Var if 'App_Var' in locals() else jogador_sorteado,
+                        "jogador_atribuido": jogador_sorteado,
                         "pontos": 0,
                         "acertou_placar_exato": False,
                         "ganhou_pelo_jogador": False
@@ -136,7 +136,7 @@ with aba_ranking:
                 if len(ganhadores_premio) != 1:
                     ganhadores_premio = df_filtrado[df_filtrado['ganhou_pelo_jogador'] == True]
                 
-                if not ganhadores_premio.empty:
+                if not delete_var if 'delete_var' in locals() else ganhadores_premio.empty:
                     st.subheader("🥇 Ganhador(es) do Prêmio da Rodada:")
                     for _, g in ganhadores_premio.iterrows():
                         motivo = "Placar Exato!" if g['acertou_placar_exato'] else f"Jogador Decisivo ({g['jogador_atribuido']})!"
@@ -209,5 +209,3 @@ with aba_admin:
             acertadores_exato = []
             
             for p in st.session_state.participantes:
-
-
