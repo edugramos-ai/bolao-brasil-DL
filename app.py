@@ -29,30 +29,44 @@ with st.form("cadastro_palpite", clear_on_submit=True):
     col1, col2 = st.columns(2)
     with col1:
         gols_br = st.number_input("Gols do Brasil:", min_value=0, step=1, value=0)
-    with col2:
-        gols_adv = st.number_input("Gols do Adversário:", min_value=0, step=1, value=0)
+   # ==========================================
+# ABA 1: PALPITES (PÚBLICO)
+# ==========================================
+with aba_palpites:
+    st.title("🇧🇷 Bolão Exclusivo - Jogos do Brasil")
+    st.subheader(f"Próxima Partida: {st.session_state.jogo_atual['confronto']}")
     
-    botao_enviar = st.form_submit_input("Confirmar Palpite")
+    if st.session_state.jogo_atual["status_finalizado"]:
+        st.warning("⚠️ Os palpites para este jogo já estão encerrados.")
+    else:
+        with st.form("cadastro_palpite", clear_on_submit=True):
+            nome = st.text_input("Seu Nome:")
+            col1, col2 = st.columns(2)
+            with col1:
+                gols_br = st.number_input("Gols do Brasil:", min_value=0, step=1, value=0)
+            with col2:
+                gols_adv = st.number_input("Gols do Adversário:", min_value=0, step=1, value=0)
+            
+            botao_enviar = st.form_submit_button("Confirmar Palpite")
 
-if botao_enviar and nome:
-    # Nova Regra: Sorteio aleatório de um jogador de linha
-    jogador_sorteado = random.choice(JOGADORES_LINHA)
-    
-    # Salva o participante
-    st.session_state.participantes.append({
-        "nome": nome,
-        "gols_br": gols_br,
-        "gols_adv": gols_adv,
-        "jogador_atribuido": jogador_sorteado,
-        "pontos": 0,
-        "acertou_placar_exato": False,
-        "ganhou_pelo_jogador": False
-    })
-    st.success(f"✅ Palpite registrado! Seu jogador da sorte é: **{jogador_sorteado}**")
-
-# 3. Processamento do Resultado e Regras de Pontuação
-st.header(f"⚽ Resultado do Jogo: {JOGO_ATUAL['confronto']}")
-st.info(f"Placar Real: Brasil {JOGO_ATUAL['placar_real_br']} x {JOGO_ATUAL['placar_real_adv']} (Último gol do Brasil: {JOGO_ATUAL['autor_ultimo_gol']})")
+        if botao_enviar:
+            if not nome.strip():
+                st.error("❌ Por favor, digite o seu nome.")
+            else:
+                # Regra: Sorteio aleatório de um jogador de linha
+                jogador_sorteado = random.choice(JOGADORES_LINHA)
+                
+                # Salva o participante na lista
+                st.session_state.participantes.append({
+                    "nome": nome,
+                    "gols_br": gols_br,
+                    "gols_adv": gols_adv,
+                    "jogador_atribuido": jogador_sorteado,
+                    "pontos": 0,
+                    "acertou_placar_exato": False,
+                    "ganhou_pelo_jogador": False
+                })
+                st.success(f"✅ {nome}, seu palpite foi registrado! Seu jogador da sorte é: **{jogador_sorteado}**")
 
 if st.button("📊 Calcular Pontuações e Vencedor"):
     br_real = JOGO_ATUAL["placar_real_br"]
