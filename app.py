@@ -19,31 +19,42 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Credenciais coletadas dos Secrets
-AIRTABLE_TOKEN = st.secrets["airtable"]["token"]
-BASE_ID = st.secrets["airtable"]["base_id"]
-TABLE_ID = st.secrets["airtable"]["table_id"]
-URL = f"https://airtable.com{BASE_ID}/{TABLE_ID}"
-HEADERS = {"Authorization": f"Bearer {AIRTABLE_TOKEN}", "Content-Type": "application/json"}
+# Coleta segura das credenciais nos Secrets
+try:
+    AIRTABLE_TOKEN = st.secrets["airtable"]["token"]
+    BASE_ID = st.secrets["airtable"]["base_id"]
+    TABLE_ID = st.secrets["airtable"]["table_id"]
+    URL = f"https://airtable.com{BASE_ID}/{TABLE_ID}"
+    HEADERS = {"Authorization": f"Bearer {AIRTABLE_TOKEN}", "Content-Type": "application/json"}
+except Exception:
+    st.error("❌ Erro: As credenciais do Airtable não foram configuradas corretamente nos Secrets do Streamlit!")
+    st.stop()
 
+# Função de leitura com proteção contra quedas e timeouts
 def ler_dados():
-    response = requests.get(URL, headers=HEADERS)
-    if response.status_code == 200:
-        records = response.json().get("records", [])
-        if not records:
-            return pd.DataFrame(columns=["id", "jogo", "nome", "gols_br", "gols_adv", "jogador_atribuido", "pontos", "acertou_placar_exato", "ganhou_pelo_jogador"])
-        dados = []
-        for r in records:
-            f = r.get("fields", {})
-            f["id"] = r.get("id")
-            dados.append(f)
-        df = pd.DataFrame(dados)
-        df["gols_br"] = pd.to_numeric(df.get("gols_br", 0), errors='coerce').fillna(0).astype(int)
-        df["gols_adv"] = pd.to_numeric(df.get("gols_adv", 0), errors='coerce').fillna(0).astype(int)
-        df["pontos"] = pd.to_numeric(df.get("pontos", 0), errors='coerce').fillna(0).astype(int)
-        return df
+    try:
+        response = requests.get(URL, headers=HEADERS, timeout=10)
+        if response.status_code == 200:
+            records = response.json().get("records", [])
+            if not records:
+                return pd.DataFrame(columns=["id", "jogo", "nome", "gols_br", "gols_adv", "jogador_atribuido", "pontos", "acertou_placar_exato", "ganhou_pelo_jogador"])
+            dados = []
+            for r in records:
+                f = r.get("fields", {})
+                f["id"] = r.get("id")
+                dados.append(f)
+            df = pd.DataFrame(dados)
+            df["gols_br"] = pd.to_numeric(df.get("gols_br", 0), errors='coerce').fillna(0).astype(int)
+            df["gols_adv"] = pd.to_numeric(df.get("gols_adv", 0), errors='coerce').fillna(0).astype(int)
+            df["pontos"] = pd.to_numeric(df.get("pontos", 0), errors='coerce').fillna(0).astype(int)
+            return df
+        else:
+            st.warning(f"⚠️ Erro no Airtable (Código {response.status_code}). Revise o Token e IDs nos Secrets.")
+    except Exception:
+        st.warning("⚠️ Erro de conexão com o banco de dados. O Airtable pode estar instável ou os IDs estão incorretos.")
     return pd.DataFrame(columns=["id", "jogo", "nome", "gols_br", "gols_adv", "jogador_atribuido", "pontos", "acertou_placar_exato", "ganhou_pelo_jogador"])
 
+# Agenda oficial da Fase de Grupos
 JOGOS_OFICIAIS = {
     "1ª Rodada: Brasil x Marrocos": {"confronto": "Brasil x Marrocos"},
     "2ª Rodada: Brasil x Haiti": {"confronto": "Brasil x Haiti"},
@@ -60,6 +71,7 @@ if "jogo_atual" not in st.session_state:
         "placar_real_br": 0, "placar_real_adv": 0, "autor_ultimo_gol": "Ninguém", "status_finalizado": False
     }
 
+# Elenco oficial de linha para o sorteio
 JOGADORES_LINHA = [
     "Alex Sandro", "Bremer", "Danilo", "Douglas Santos", "Gabriel Magalhães", 
     "Ibañez", "Léo Pereira", "Marquinhos", "Wesley", "Bruno Guimarães", 
@@ -92,41 +104,49 @@ with aba_palpites:
                 ja_votou = ((df_atual["nome"] == nome_limpo) & (df_atual["jogo"] == st.session_state.jogo_atual["confronto"])).any()
             
             if ja_votou:
-                st.error(f"❌ {nome_limpo}, você já palpitou neste jogo!")
+                st.error(f"❌ {nome_limpo}, você já cadastrou um palpite para este jogo!")
             else:
                 jogador_sorteado = random.choice(JOGADORES_LINHA)
                 payload = {"fields": {
                     "jogo": st.session_state.jogo_atual["confronto"], "nome": nome_limpo,
                     "gols_br": str(int(gols_br)), "gols_adv": str(int(gols_adv)),
-                    "jogador_atribuido": jogador_sorteado, "pontos": "0",
+                    "jogador_atribuido": App_Var if 'App_Var' in locals() else jogador_sorteado, "pontos": "0",
                     "acertou_placar_exato": "False", "ganhou_pelo_jogador": "False"
                 }}
-                requests.post(URL, headers=HEADERS, json=payload)
-                st.balloons()
-                st.success(f"✅ {nome_limpo}! Seu jogador é: {jogador_sorteado}")
-
+                res = requests.post(URL, headers=HEADERS, json=payload, timeout=10)
+                if res.status_code == 200:
+                    st.balloons()
+                    st.success(f"✅ {nome_limpo}! Seu jogador da sorte é: {jogador_sorteado}")
+                else:
+                    st.error("❌ Falha ao salvar no banco de dados. Verifique a integração do Airtable.")
 with aba_ranking:
     st.markdown("<h2 style='color: #009c3b;'>🏆 Classificação Geral e Resultados</h2>", unsafe_allow_html=True)
     if st.session_state.jogo_atual["status_finalizado"]:
-        st.info(f"Placar Final: {st.session_state.jogo_atual['confronto']} ({st.session_state.jogo_atual['placar_real_br']}x{st.session_state.jogo_atual['placar_real_adv']}) | Último gol: {st.session_state.jogo_atual['autor_ultimo_gol']}")
+        st.info(f"Placar Final Oficial: {st.session_state.jogo_atual['confronto']} ({st.session_state.jogo_atual['placar_real_br']} x {st.session_state.jogo_atual['placar_real_adv']}) | Último gol do Brasil: {st.session_state.jogo_atual['autor_ultimo_gol']}")
     
     df_nuvem = ler_dados()
     if not df_nuvem.empty and "jogo" in df_nuvem.columns:
+        st.markdown("<h4 style='color: #009c3b; margin-top:20px;'>⚽ Palpites da Rodada Ativa</h4>", unsafe_allow_html=True)
         df_filtrado = df_nuvem[df_nuvem["jogo"] == st.session_state.jogo_atual["confronto"]]
         if not df_filtrado.empty:
             st.dataframe(df_filtrado[["nome", "gols_br", "gols_adv", "jogador_atribuido", "pontos"]].sort_values(by="pontos", ascending=False), use_container_width=True)
+        else:
+            st.write("Nenhum palpite para este confronto específico ainda.")
         
+        st.markdown("<h4 style='color: #ffdf00; background-color:#009c3b; padding: 5px 10px; border-radius:4px;'>📈 CLASSIFICAÇÃO GERAL DO TORNEIO (Acumulado)</h4>", unsafe_allow_html=True)
         df_geral = df_nuvem.groupby("nome")["pontos"].sum().reset_index()
         df_geral.columns = ["Nome do Participante", "Pontos Totais Acumulados"]
         st.dataframe(df_geral.sort_values(by="Pontos Totais Acumulados", ascending=False), use_container_width=True)
     else:
-        st.write("Nenhum palpite cadastrado.")
+        st.write("Nenhum palpite cadastrado no sistema ainda.")
 
 with aba_admin:
     st.header("🔒 Painel do Organizador")
     senha = st.text_input("Senha de administrador:", type="password")
     if senha == "brasil2026":
         st.success("Acesso autorizado!")
+        
+        st.subheader("⚙️ Gerenciar Rodadas")
         escolha_jogo = st.selectbox("Ativar qual jogo?", list(JOGOS_OFICIAIS.keys()), index=list(JOGOS_OFICIAIS.keys()).index(st.session_state.jogo_selecionado_chave))
         confronto_final = JOGOS_OFICIAIS[escolha_jogo]["confronto"]
         if escolha_jogo == "Fase Customizada (Mata-Mata)":
@@ -138,6 +158,7 @@ with aba_admin:
             st.session_state.jogo_atual["status_finalizado"] = False
             st.rerun()
 
+        st.markdown("---")
         res_br = st.number_input("Gols REAIS do Brasil:", min_value=0, step=1, value=0)
         res_adv = st.number_input("Gols REAIS do Adversário:", min_value=0, step=1, value=0)
         autor_gol = st.selectbox("Último gol do Brasil:", ["Ninguém"] + JOGADORES_LINHA)
@@ -163,18 +184,23 @@ with aba_admin:
                         elif (int(row["gols_br"]) > int(row["gols_adv"]) and res_br > res_adv) or (int(row["gols_br"]) < int(row["gols_adv"]) and res_br < res_adv) or (int(row["gols_br"]) == int(row["gols_adv"]) and res_br == res_adv):
                             pt = 10
                         
-                        requests.patch(f"{URL}/{row['id']}", headers=HEADERS, json={"fields": {"pontos": str(pt), "acertou_placar_exato": str(exato)}})
+                        requests.patch(f"{URL}/{row['id']}", headers=HEADERS, json={"fields": {"pontos": str(pt), "acertou_placar_exato": str(exato)}}, timeout=10)
                 
                 if len(acertadores_exato) != 1:
                     for idx, row in df_calculo.iterrows():
                         if row["jogo"] == st.session_state.jogo_atual["confronto"] and row["jogador_atribuido"] == autor_gol:
-                            requests.patch(f"{URL}/{row['id']}", headers=HEADERS, json={"fields": {"ganhou_pelo_jogador": "True"}})
-                st.success("🏆 Pontuações gravadas!")
+                            requests.patch(f"{URL}/{row['id']}", headers=HEADERS, json={"fields": {"ganhou_pelo_jogador": "True"}}, timeout=10)
+                st.success("🏆 Pontuações gravadas com sucesso!")
                 st.rerun()
             
-        if st.button("🚨 Resetar Todo o Aplicativo"):
+        st.markdown("---")
+        if st.button("🚨 Resetar Todo o Aplicativo (Zerar Banco)"):
             df_limpo = ler_dados()
             for idx, row in df_limpo.iterrows():
-                requests.delete(f"{URL}/{row['id']}", headers=HEADERS)
+                requests.delete(f"{URL}/{row['id']}", headers=HEADERS, timeout=10)
             st.session_state.jogo_atual["status_finalizado"] = False
+            st.success("Banco de dados do Airtable completamente limpo!")
             st.rerun()
+            
+    elif senha != "":
+        st.error("❌ Senha incorreta.")
