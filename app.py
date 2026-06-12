@@ -54,11 +54,11 @@ if "jogo_atual" not in st.session_state:
         "status_finalizado": False
     }
 
-# Lista OFICIAL de jogadores de linha convocados por Carlo Ancelotti (Copa 2026)
+# Lista DEFINITIVA de jogadores de linha convocados (Copa 2026)
 JOGADORES_LINHA = [
     "Alex Sandro", "Bremer", "Danilo", "Douglas Santos", 
     "Gabriel Magalhães", "Ibañez", "Léo Pereira", "Marquinhos", "Wesley",
-    "Bruno Guimarães", "Casemiro", "Danilo Santos", "Fabinho", "Éderson", "Lucas Paquetá",
+    "Bruno Guimarães", "Casemiro", "Danilo (Botafogo)", "Fabinho", "Lucas Paquetá",
     "Endrick", "Gabriel Martinelli", "Igor Thiago", "Luiz Henrique", 
     "Matheus Cunha", "Neymar", "Raphinha", "Rayan", "Vini Jr."
 ]
@@ -103,7 +103,7 @@ with aba_palpites:
                         "nome": nome_limpo,
                         "gols_br": gols_br,
                         "gols_adv": gols_adv,
-                        "jogador_atribuido": jogador_sorteado,
+                        "jogador_atribuido": App_Var if 'App_Var' in locals() else jogador_sorteado,
                         "pontos": 0,
                         "acertou_placar_exato": False,
                         "ganhou_pelo_jogador": False
@@ -164,15 +164,14 @@ with aba_admin:
     if senha == "brasil2026":
         st.success("Acesso autorizado!")
         
-        # --- NOVO BLOCO: SISTEMA DE BACKUP ---
         st.subheader("💾 Backup de Segurança")
         if st.session_state.participantes:
             df_backup = pd.DataFrame(st.session_state.participantes)
-            csv = df_backup.to_csv(index=False).encode('utf-8-sig')
+            csv_data = df_backup.to_csv(index=False)
             
             st.download_button(
                 label="📥 Baixar Planilha de Palpites (CSV)",
-                data=csv,
+                data=csv_data,
                 file_name="backup_bolao_brasil_2026.csv",
                 mime="text/csv",
             )
@@ -210,4 +209,5 @@ with aba_admin:
             acertadores_exato = []
             
             for p in st.session_state.participantes:
+
 
