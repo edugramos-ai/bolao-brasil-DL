@@ -2,19 +2,44 @@ import streamlit as st
 import random
 import pandas as pd
 
-# 1. Configuração Inicial da Página
+# 1. Configuração e Estilização Visual (Verde e Amarelo)
 st.set_page_config(page_title="Bolão Seleção Brasileira 2026", layout="centered")
+
+st.markdown("""
+    <style>
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 10px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 50px;
+        white-space: pre-wrap;
+        background-color: #f0f2f6;
+        border-radius: 4px 4px 0px 0px;
+        gap: 1px;
+        padding-top: 10px;
+        padding-bottom: 10px;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #009c3b !important;
+        color: #ffdf00 !important;
+        font-weight: bold;
+    }
+    div[data-testid="stHeader"] {
+        background-color: #009c3b;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 # Inicialização segura do banco de dados em memória
 if "participantes" not in st.session_state:
     st.session_state.participantes = []
 
-# Dicionário com os dados dos jogos da Fase de Grupos + Opção Customizada
+# Agenda oficial Copa 2026
 JOGOS_OFICIAIS = {
-    "1ª Rodada: Brasil x Marrocos": {"confronto": "Brasil x Marrocos", "bloqueado": False},
-    "2ª Rodada: Brasil x Haiti": {"confronto": "Brasil x Haiti", "bloqueado": False},
-    "3ª Rodada: Escócia x Brasil": {"confronto": "Escócia x Brasil", "bloqueado": False},
-    "Fase Customizada (Mata-Mata)": {"confronto": "Brasil x Adversário", "bloqueado": False}
+    "1ª Rodada: Brasil x Marrocos": {"confronto": "Brasil x Marrocos"},
+    "2ª Rodada: Brasil x Haiti": {"confronto": "Brasil x Haiti"},
+    "3ª Rodada: Escócia x Brasil": {"confronto": "Escócia x Brasil"},
+    "Fase Customizada (Mata-Mata)": {"confronto": "Brasil x Adversário"}
 }
 
 if "jogo_selecionado_chave" not in st.session_state:
@@ -37,15 +62,16 @@ JOGADORES_LINHA = [
     "Igor Jesus", "Luiz Henrique", "Savinho", "Andreas Pereira", "Endrick"
 ]
 
-# Criação das abas de navegação
-aba_palpites, aba_ranking, aba_admin = st.tabs(["📝 Dar Palpite", "📊 Classificação Geral", "🔒 Área do Administrador"])
+# Abas de navegação
+aba_palpites, aba_ranking, aba_admin = st.tabs(["📝 DAR PALPITE", "📊 CLASSIFICAÇÃO", "🔒 ADMINISTRADOR"])
 
 # ==========================================
-# ABA 1: PALPITES (PÚBLICO)
+# ABA 1: PALPITES
 # ==========================================
 with aba_palpites:
-    st.title("🇧🇷 Bolão Exclusivo - Jogos do Brasil")
-    st.subheader(f"Partida Ativa: {st.session_state.jogo_atual['confronto']}")
+    st.markdown("<h1 style='text-align: center; color: #009c3b;'>🇧🇷 Bolão Copa 2026 🇧🇷</h1>", unsafe_allow_html=True)
+    st.markdown(f"<h3 style='text-align: center; color: #111;'>Partida Ativa: <b>{st.session_state.jogo_atual['confronto']}</b></h3>", unsafe_allow_html=True)
+    st.markdown("---")
     
     if st.session_state.jogo_atual["status_finalizado"]:
         st.warning("⚠️ Os palpites para este jogo já estão encerrados e o resultado foi lançado.")
@@ -56,88 +82,100 @@ with aba_palpites:
             with col1:
                 gols_br = st.number_input("Gols do Brasil:", min_value=0, step=1, value=0)
             with col2:
-                gols_adv = st.number_input(f"Gols do Adversário:", min_value=0, step=1, value=0)
+                gols_adv = st.number_input("Gols do Adversário:", min_value=0, step=1, value=0)
             
-            botao_enviar = st.form_submit_button(label="Confirmar Palpite")
+            botao_enviar = st.form_submit_button(label="🚀 ENVIAR PALPITE")
 
         if botao_enviar:
             if not nome.strip():
                 st.error("❌ Por favor, digite o seu nome antes de enviar.")
             else:
-                jogador_sorteado = random.choice(JOGADORES_LINHA)
+                nome_limpo = nome.strip().title()
+                # Verifica se o jogador já deu palpite neste mesmo jogo específico
+                ja_votou = any(p["nome"] == nome_limpo and p["jogo"] == st.session_state.jogo_atual["confronto"] for p in st.session_state.participantes)
                 
-                st.session_state.participantes.append({
-                    "jogo": st.session_state.jogo_atual["confronto"],
-                    "nome": nome.strip(),
-                    "gols_br": gols_br,
-                    "gols_adv": gols_adv,
-                    "jogador_atribuido": jogador_sorteado,
-                    "pontos": 0,
-                    "acertou_placar_exato": False,
-                    "ganhou_pelo_jogador": False
-                })
-                st.success(f"✅ {nome}, seu palpite foi registrado! Seu jogador da sorte é: **{jogador_sorteado}**")
+                if ja_votou:
+                    st.error(f"❌ {nome_limpo}, você já cadastrou um palpite para o jogo {st.session_state.jogo_atual['confronto']}!")
+                else:
+                    jogador_sorteado = random.choice(JOGADORES_LINHA)
+                    st.session_state.participantes.append({
+                        "jogo": st.session_state.jogo_atual["confronto"],
+                        "nome": nome_limpo,
+                        "gols_br": gols_br,
+                        "gols_adv": gols_adv,
+                        "jogador_atribuido": jogador_sorteado,
+                        "pontos": 0,
+                        "acertou_placar_exato": False,
+                        "ganhou_pelo_jogador": False
+                    })
+                    st.balloons()
+                    st.success(f"✅ {nome_limpo}, palpite salvo! Seu jogador da sorte é: **{jogador_sorteado}**")
 
 # ==========================================
-# ABA 2: RANKING E RESULTADO (PÚBLICO)
+# ABA 2: RANKINGS (RODADA + GERAL)
 # ==========================================
 with aba_ranking:
-    st.header("🏆 Classificação e Resultados")
+    st.markdown("<h2 style='color: #009c3b;'>🏆 Classificação Geral e Resultados</h2>", unsafe_allow_html=True)
     
+    # Detalhes do placar oficial
     if st.session_state.jogo_atual["status_finalizado"]:
-        st.info(f" Placar Final Oficial: {st.session_state.jogo_atual['confronto']} "
+        st.info(f" Placar Final: {st.session_state.jogo_atual['confronto']} "
                 f"({st.session_state.jogo_atual['placar_real_br']} x {st.session_state.jogo_atual['placar_real_adv']}) \n\n"
-                f"⚽ Último gol do Brasil marcado por: **{st.session_state.jogo_atual['autor_ultimo_gol']}**")
+                f"⚽ Último gol do Brasil: **{st.session_state.jogo_atual['autor_ultimo_gol']}**")
     else:
-        st.write(f"Aguardando a finalização de **{st.session_state.jogo_atual['confronto']}** para calcular o ranking.")
+        st.write(f"Aguardando o fim de **{st.session_state.jogo_atual['confronto']}**.")
 
     if st.session_state.participantes:
         df = pd.DataFrame(st.session_state.participantes)
         
-        # Filtra os palpites apenas do jogo que está ativo no momento
+        # 1. TABELA DA RODADA ATUAL
+        st.markdown("<h4 style='color: #009c3b; margin-top:20px;'>⚽ Palpites da Rodada Ativa</h4>", unsafe_allow_html=True)
         df_filtrado = df[df["jogo"] == st.session_state.jogo_atual["confronto"]]
         
         if not df_filtrado.empty:
             if st.session_state.jogo_atual["status_finalizado"]:
                 ganhadores_premio = df_filtrado[df_filtrado['acertou_placar_exato'] == True]
-                
                 if len(ganhadores_premio) != 1:
                     ganhadores_premio = df_filtrado[df_filtrado['ganhou_pelo_jogador'] == True]
                 
                 if not ganhadores_premio.empty:
-                    st.subheader("🥇 Ganhador(es) do Prêmio Principal deste jogo:")
+                    st.subheader("🥇 Ganhador(es) do Prêmio da Rodada:")
                     for _, g in ganhadores_premio.iterrows():
-                        motivo = "Placar Exato!" if g['acertou_placar_exato'] else f"Atribuição do jogador decisivo ({g['jogador_atribuido']})!"
-                        st.success(f"⭐ **{g['nome']}** levou o prêmio por: *{motivo}*")
+                        motivo = "Placar Exato!" if g['acertou_placar_exato'] else f"Jogador Decisivo ({g['jogador_atribuido']})!"
+                        st.success(f"⭐ **{g['nome']}** venceu por: *{motivo}*")
             
-            st.subheader(f"📈 Tabela de Pontos - {st.session_state.jogo_atual['confronto']}")
             st.dataframe(df_filtrado[["nome", "gols_br", "gols_adv", "jogador_atribuido", "pontos"]].sort_values(by="pontos", ascending=False), use_container_width=True)
         else:
-            st.write("Nenhum palpite cadastrado para este confronto específico ainda.")
+            st.write("Sem palpites para o confronto ativo.")
+            
+        # 2. TABELA DO RANKING GERAL ACUMULADO
+        st.markdown("<h4 style='color: #ffdf00; background-color:#009c3b; padding: 5px 10px; border-radius:4px;'>📈 CLASSIFICAÇÃO GERAL DO TORNEIO (Soma de tudo)</h4>", unsafe_allow_html=True)
+        # Agrupa os participantes pelo nome e soma seus pontos de todas as rodadas
+        df_geral = df.groupby("nome")["pontos"].sum().reset_index()
+        df_geral.columns = ["Nome do Participante", "Pontos Totais Acumulados"]
+        
+        st.dataframe(df_geral.sort_values(by="Pontos Totais Acumulados", ascending=False), use_container_width=True)
     else:
-        st.write("Nenhum palpite cadastrado no sistema.")
+        st.write("Nenhum palpite cadastrado no sistema ainda.")
 
 # ==========================================
-# ABA 3: ÁREA DO ADMINISTRADOR (RESTRITA)
+# ABA 3: ADMINISTRADOR
 # ==========================================
 with aba_admin:
-    st.header("🔒 Controle do Organizador")
-    senha = st.text_input("Digite a senha de administrador:", type="password")
+    st.header("🔒 Painel do Organizador")
+    senha = st.text_input("Senha de administrador:", type="password")
     
     if senha == "brasil2026":
         st.success("Acesso autorizado!")
-        st.subheader("⚙️ Seleção de Rodada e Chaveamento")
+        st.subheader("⚙️ Gerenciar Rodadas")
         
-        # Menu de escolha automática dos jogos
-        escolha_jogo = st.selectbox("Selecione qual rodada ativar no sistema:", list(JOGOS_OFICIAIS.keys()), index=list(JOGOS_OFICIAIS.keys()).index(st.session_state.jogo_selecionado_chave))
-        
+        escolha_jogo = st.selectbox("Ativar qual jogo no sistema?", list(JOGOS_OFICIAIS.keys()), index=list(JOGOS_OFICIAIS.keys()).index(st.session_state.jogo_selecionado_chave))
         confronto_final = JOGOS_OFICIAIS[escolha_jogo]["confronto"]
         
-        # Se for a opção customizada de mata-mata, libera campo de texto para escrita livre
         if escolha_jogo == "Fase Customizada (Mata-Mata)":
-            confronto_final = st.text_input("Digite o confronto customizado (Ex: Brasil x Argentina):", value="Brasil x ")
+            confronto_final = st.text_input("Digite o confronto (Ex: Brasil x Argentina):", value="Brasil x ")
         
-        if st.button("Confirmar e Mudar Jogo Ativo"):
+        if st.button("Confirmar Mudança de Jogo"):
             st.session_state.jogo_selecionado_chave = escolha_jogo
             st.session_state.jogo_atual["confronto"] = confronto_final
             st.session_state.jogo_atual["status_finalizado"] = False
@@ -145,12 +183,12 @@ with aba_admin:
             st.rerun()
 
         st.markdown("---")
-        st.write(f"📋 **Lançar Placar Final para: {st.session_state.jogo_atual['confronto']}**")
+        st.write(f"📋 **Encerrar e Pontuar: {st.session_state.jogo_atual['confronto']}**")
         res_br = st.number_input("Gols REAIS do Brasil:", min_value=0, step=1, value=0)
         res_adv = st.number_input("Gols REAIS do Adversário:", min_value=0, step=1, value=0)
         autor_gol = st.selectbox("Quem fez o ÚLTIMO gol do Brasil?", ["Ninguém"] + JOGADORES_LINHA)
         
-        if st.button("🔴 Encerrar Jogo e Calcular Pontos"):
+        if st.button("🔴 Fechar Rodada e Computar Pontos"):
             st.session_state.jogo_atual["placar_real_br"] = res_br
             st.session_state.jogo_atual["placar_real_adv"] = res_adv
             st.session_state.jogo_atual["autor_ultimo_gol"] = autor_gol
@@ -158,7 +196,7 @@ with aba_admin:
             
             acertadores_exato = []
             
-            # Varre apenas os palpites do jogo atual para computar os pontos
+            # Atualiza os pontos somente do jogo atual no histórico geral
             for p in st.session_state.participantes:
                 if p["jogo"] == st.session_state.jogo_atual["confronto"]:
                     p["acertou_placar_exato"] = (p["gols_br"] == res_br and p["gols_adv"] == res_adv)
@@ -166,25 +204,3 @@ with aba_admin:
                     if p["acertou_placar_exato"]:
                         p["pontos"] = 25
                         acertadores_exato.append(p)
-                    elif (p["gols_br"] - p["gols_adv"]) == (res_br - res_adv) and (p["gols_br"] > p["gols_adv"] or p["gols_br"] < p["gols_adv"]):
-                        p["pontos"] = 18
-                    elif (p["gols_br"] > p["gols_adv"] and res_br > res_adv) or (p["gols_br"] < p["gols_adv"] and res_br < res_adv) or (p["gols_br"] == p["gols_adv"] and res_br == res_adv):
-                        p["pontos"] = 10
-                    else:
-                        p["pontos"] = 0
-            
-            if len(acertadores_exato) != 1:
-                for p in st.session_state.participantes:
-                    if p["jogo"] == st.session_state.jogo_atual["confronto"] and p["jogador_atribuido"] == autor_gol:
-                        p["ganhou_pelo_jogador"] = True
-            
-            st.success("🏆 Pontuações calculadas! Confira na Aba de Classificação Geral.")
-            
-        st.markdown("---")
-        if st.button("🔄 Limpar TODOS os palpites salvos no histórico"):
-            st.session_state.participantes = []
-            st.session_state.jogo_atual["status_finalizado"] = False
-            st.rerun()
-            
-    elif senha != "":
-        st.error("❌ Senha incorreta.")
