@@ -11,7 +11,7 @@ if "participantes" not in st.session_state:
 
 if "jogo_atual" not in st.session_state:
     st.session_state.jogo_atual = {
-        "confronto": "Brasil x Croácia",
+        "confronto": "Brasil x Marrocos",  # Estreia oficial em 13/06/2026
         "placar_real_br": 0,
         "placar_real_adv": 0,
         "autor_ultimo_gol": "Ninguém",
