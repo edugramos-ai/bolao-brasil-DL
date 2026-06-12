@@ -5,7 +5,7 @@ import pandas as pd
 # 1. Configuração Inicial e Banco de Dados em Memória
 st.set_page_config(page_title="Bolão Seleção Brasileira", layout="centered")
 
-if "participantes" not in st.set_state:
+if "participantes" not in st.session_state:
     st.session_state.participantes = []
 
 # Lista oficial de jogadores de linha (excluindo goleiros)
