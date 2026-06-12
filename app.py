@@ -27,12 +27,15 @@ try:
     URL = f"https://airtable.com{BASE_ID}/{TABLE_ID}"
     HEADERS = {"Authorization": f"Bearer {AIRTABLE_TOKEN}", "Content-Type": "application/json"}
 except Exception:
-    st.error("❌ Erro: As credenciais do Airtable não foram configuradas nos Secrets do Streamlit!")
-    st.stop()
-
-# Função de leitura robusta
-def ler_dados():
-    try:
+   try:
+                    res = requests.post(URL, headers=HEADERS, json=payload, timeout=10)
+                    if res.status_code == 200:
+                        st.balloons()
+                        st.success(f"✅ {nome_limpo}! Seu jogador da sorte é: {jogador_sorteado}")
+                    else:
+                        st.error(f"❌ Resposta do Airtable: Código {res.status_code} - {res.text}")
+                except Exception as e:
+                    st.error(f"❌ Erro crítico de rede: {e}")
         response = requests.get(URL, headers=HEADERS, timeout=10)
         if response.status_code == 200:
             records = response.json().get("records", [])
