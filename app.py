@@ -1,38 +1,40 @@
 import streamlit as st
 import random
 import pandas as pd
+from streamlit_gsheets import GSheetsConnection
 
 # 1. Configuração e Estilização Visual (Verde e Amarelo)
 st.set_page_config(page_title="Bolão Seleção Brasileira 2026", layout="centered")
 
 st.markdown("""
     <style>
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 10px;
-    }
+    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
     .stTabs [data-baseweb="tab"] {
-        height: 50px;
-        white-space: pre-wrap;
-        background-color: #f0f2f6;
-        border-radius: 4px 4px 0px 0px;
-        gap: 1px;
-        padding-top: 10px;
-        padding-bottom: 10px;
+        height: 50px; white-space: pre-wrap; background-color: #f0f2f6;
+        border-radius: 4px 4px 0px 0px; gap: 1px; padding: 10px;
     }
     .stTabs [aria-selected="true"] {
-        background-color: #009c3b !important;
-        color: #ffdf00 !important;
-        font-weight: bold;
+        background-color: #009c3b !important; color: #ffdf00 !important; font-weight: bold;
     }
-    div[data-testid="stHeader"] {
-        background-color: #009c3b;
-    }
+    div[data-testid="stHeader"] { background-color: #009c3b; }
     </style>
 """, unsafe_allow_html=True)
 
-# Inicialização segura do banco de dados em memória
-if "participantes" not in st.session_state:
-    st.session_state.participantes = []
+# Conexão oficial com o Google Sheets via Streamlit
+conn = st.connection("gsheets", type=GSheetsConnection)
+
+# Função segura para ler a planilha em tempo real
+def ler_dados():
+    try:
+        df = conn.read(ttl="0s")
+        # Força os tipos corretos para evitar erros de cálculo
+        df["gols_br"] = pd.to_numeric(df["gols_br"], errors='coerce').fillna(0).astype(int)
+        df["gols_adv"] = pd.to_numeric(df["gols_adv"], errors='coerce').fillna(0).astype(int)
+        df["pontos"] = pd.to_numeric(df["pontos"], errors='coerce').fillna(0).astype(int)
+        return df
+    except Exception:
+        # Retorna estrutura vazia padrão caso a planilha esteja totalmente em branco
+        return pd.DataFrame(columns=["jogo", "nome", "gols_br", "gols_adv", "jogador_atribuido", "pontos", "acertou_placar_exato", "ganhou_pelo_jogador"])
 
 # Agenda oficial Copa 2026
 JOGOS_OFICIAIS = {
@@ -54,16 +56,14 @@ if "jogo_atual" not in st.session_state:
         "status_finalizado": False
     }
 
-# Lista DEFINITIVA de jogadores de linha convocados (Copa 2026)
 JOGADORES_LINHA = [
-    "Alex Sandro", "Bremer", "Danilo", "Douglas Santos", 
-    "Gabriel Magalhães", "Ibañez", "Léo Pereira", "Marquinhos", "Wesley",
-    "Bruno Guimarães", "Casemiro", "Danilo (Botafogo)", "Fabinho", "Lucas Paquetá",
-    "Endrick", "Gabriel Martinelli", "Igor Thiago", "Luiz Henrique", 
-    "Matheus Cunha", "Neymar", "Raphinha", "Rayan", "Vini Jr."
+    "Alex Sandro", "Bremer", "Danilo", "Douglas Santos", "Gabriel Magalhães", 
+    "Ibañez", "Léo Pereira", "Marquinhos", "Wesley", "Bruno Guimarães", 
+    "Casemiro", "Danilo (Botafogo)", "Fabinho", "Lucas Paquetá", "Endrick", 
+    "Gabriel Martinelli", "Igor Thiago", "Luiz Henrique", "Matheus Cunha", 
+    "Neymar", "Raphinha", "Rayan", "Vini Jr."
 ]
 
-# Abas de navegação
 aba_palpites, aba_ranking, aba_admin = st.tabs(["📝 DAR PALPITE", "📊 CLASSIFICAÇÃO", "🔒 ADMINISTRADOR"])
 
 # ==========================================
@@ -92,24 +92,32 @@ with aba_palpites:
                 st.error("❌ Por favor, digite o seu nome antes de enviar.")
             else:
                 nome_limpo = nome.strip().title()
-                ja_votou = any(p["nome"] == nome_limpo and p["jogo"] == st.session_state.jogo_atual["confronto"] for p in st.session_state.participantes)
+                df_atual = ler_dados()
+                
+                # Validação contra duplicidade consultando o Google Sheets direto
+                ja_votou = False
+                if not df_atual.empty:
+                    ja_votou = ((df_atual["nome"] == nome_limpo) & (df_atual["jogo"] == st.session_state.jogo_atual["confronto"])).any()
                 
                 if ja_votou:
                     st.error(f"❌ {nome_limpo}, você já cadastrou um palpite para o jogo {st.session_state.jogo_atual['confronto']}!")
                 else:
                     jogador_sorteado = random.choice(JOGADORES_LINHA)
-                    st.session_state.participantes.append({
+                    novo_palpite = pd.DataFrame([{
                         "jogo": st.session_state.jogo_atual["confronto"],
                         "nome": nome_limpo,
-                        "gols_br": gols_br,
-                        "gols_adv": gols_adv,
+                        "gols_br": int(gols_br),
+                        "gols_adv": int(gols_adv),
                         "jogador_atribuido": jogador_sorteado,
                         "pontos": 0,
                         "acertou_placar_exato": False,
                         "ganhou_pelo_jogador": False
-                    })
+                    }])
+                    
+                    df_final = pd.concat([df_atual, novo_palpite], ignore_index=True)
+                    conn.update(data=df_final)
                     st.balloons()
-                    st.success(f"✅ {nome_limpo}, palpite salvo! Seu jogador da sorte é: **{jogador_sorteado}**")
+                    st.success(f"✅ {nome_limpo}, palpite salvo na nuvem! Seu jogador da sorte é: **{jogador_sorteado}**")
 # ==========================================
 # ABA 2: RANKINGS (RODADA + GERAL)
 # ==========================================
@@ -123,14 +131,18 @@ with aba_ranking:
     else:
         st.write(f"Aguardando o fim de **{st.session_state.jogo_atual['confronto']}**.")
 
-    if st.session_state.participantes:
-        df = pd.DataFrame(st.session_state.participantes)
-        
-        st.markdown("<h4 style='color: #009c3b; margin-top:20px;'>⚽ Palpites da Rodada Ativa</h4>", unsafe_allow_html=True)
-        df_filtrado = df[df["jogo"] == st.session_state.jogo_atual["confronto"]]
+    df_nuvem = ler_dados()
+
+    if not df_nuvem.empty:
+        st.markdown("<h4 style='color: #009c3b; margin-top:20px;'>⚽ Palpites da Rodada Ativa (Todos os Participantes)</h4>", unsafe_allow_html=True)
+        df_filtrado = df_nuvem[df_nuvem["jogo"] == st.session_state.jogo_atual["confronto"]]
         
         if not df_filtrado.empty:
             if st.session_state.jogo_atual["status_finalizado"]:
+                # Castings de segurança para filtros booleanos vindos da planilha
+                df_filtrado["acertou_placar_exato"] = df_filtrado["acertou_placar_exato"].astype(str).str.upper() == "TRUE"
+                df_filtrado["ganhou_pelo_jogador"] = df_filtrado["ganhou_pelo_jogador"].astype(str).str.upper() == "TRUE"
+                
                 ganhadores_premio = df_filtrado[df_filtrado['acertou_placar_exato'] == True]
                 if len(ganhadores_premio) != 1:
                     ganhadores_premio = df_filtrado[df_filtrado['ganhou_pelo_jogador'] == True]
@@ -143,10 +155,10 @@ with aba_ranking:
             
             st.dataframe(df_filtrado[["nome", "gols_br", "gols_adv", "jogador_atribuido", "pontos"]].sort_values(by="pontos", ascending=False), use_container_width=True)
         else:
-            st.write("Sem palpites para o confronto ativo.")
+            st.write("Sem palpites cadastrados para o confronto ativo.")
             
         st.markdown("<h4 style='color: #ffdf00; background-color:#009c3b; padding: 5px 10px; border-radius:4px;'>📈 CLASSIFICAÇÃO GERAL DO TORNEIO (Soma de tudo)</h4>", unsafe_allow_html=True)
-        df_geral = df.groupby("nome")["pontos"].sum().reset_index()
+        df_geral = df_nuvem.groupby("nome")["pontos"].sum().reset_index()
         df_geral.columns = ["Nome do Participante", "Pontos Totais Acumulados"]
         
         st.dataframe(df_geral.sort_values(by="Pontos Totais Acumulados", ascending=False), use_container_width=True)
@@ -162,23 +174,6 @@ with aba_admin:
     
     if senha == "brasil2026":
         st.success("Acesso autorizado!")
-        
-        st.subheader("💾 Backup de Segurança")
-        if st.session_state.participantes:
-            df_backup = pd.DataFrame(st.session_state.participantes)
-            csv_data = df_backup.to_csv(index=False)
-            
-            st.download_button(
-                label="📥 Baixar Planilha de Palpites (CSV)",
-                data=csv_data,
-                file_name="backup_bolao_brasil_2026.csv",
-                mime="text/csv",
-            )
-            st.caption("Dica: Baixe este arquivo antes de resetar o app ou ao fim de cada rodada.")
-        else:
-            st.info("Nenhum dado cadastrado para exportar ainda.")
-            
-        st.markdown("---")
         
         st.subheader("⚙️ Gerenciar Rodadas")
         escolha_jogo = st.selectbox("Ativar qual jogo no sistema?", list(JOGOS_OFICIAIS.keys()), index=list(JOGOS_OFICIAIS.keys()).index(st.session_state.jogo_selecionado_chave))
@@ -206,34 +201,46 @@ with aba_admin:
             st.session_state.jogo_atual["autor_ultimo_gol"] = autor_gol
             st.session_state.jogo_atual["status_finalizado"] = True
             
-            acertadores_exato = []
+            df_calculo = ler_dados()
             
-            for p in st.session_state.participantes:
-                if p["jogo"] == st.session_state.jogo_atual["confronto"]:
-                    p["acertou_placar_exato"] = (p["gols_br"] == res_br and p["gols_adv"] == res_adv)
-                    
-                    if p["acertou_placar_exato"]:
-                        p["pontos"] = 25
-                        acertadores_exato.append(p)
-                    elif (p["gols_br"] - p["gols_adv"]) == (res_br - res_adv) and (p["gols_br"] > p["gols_adv"] or p["gols_br"] < p["gols_adv"]):
-                        p["pontos"] = 18
-                    elif (p["gols_br"] > p["gols_adv"] and res_br > res_adv) or (p["gols_br"] < p["gols_adv"] and res_br < res_adv) or (p["gols_br"] == p["gols_adv"] and res_br == res_adv):
-                        p["pontos"] = 10
-                    else:
-                        p["pontos"] = 0
-            
-            if len(acertadores_exato) != 1:
-                for p in st.session_state.participantes:
-                    if p["jogo"] == st.session_state.jogo_atual["confronto"] and p["jogador_atribuido"] == autor_gol:
-                        p["ganhou_pelo_jogador"] = True
-            
-            st.success("🏆 Pontuações calculadas e somadas ao Ranking Geral!")
-            st.rerun()
+            if not df_calculo.empty:
+                acertadores_exato = []
+                
+                # Passo 1: Varre e pontua linha por linha na planilha do Google
+                for idx, row in df_calculo.iterrows():
+                    if row["jogo"] == st.session_state.jogo_atual["confronto"]:
+                        exato = (int(row["gols_br"]) == res_br and int(row["gols_adv"]) == res_adv)
+                        df_calculo.at[idx, "acertou_placar_exato"] = exato
+                        
+                        if exato:
+                            df_calculo.at[idx, "pontos"] = 25
+                            acertadores_exato.append(idx)
+                        elif (int(row["gols_br"]) - int(row["gols_adv"])) == (res_br - res_adv) and (int(row["gols_br"]) > int(row["gols_adv"]) or int(row["gols_br"]) < int(row["gols_adv"])):
+                            df_calculo.at[idx, "pontos"] = 18
+                        elif (int(row["gols_br"]) > int(row["gols_adv"]) and res_br > res_adv) or (int(row["gols_br"]) < int(row["gols_adv"]) and res_br < res_adv) or (int(row["gols_br"]) == int(row["gols_adv"]) and res_br == res_adv):
+                            df_calculo.at[idx, "pontos"] = 10
+                        else:
+                            df_calculo.at[idx, "pontos"] = 0
+                
+                # Passo 2: Aplica regra do jogador de desempate caso necessário
+                if len(acertadores_exato) != 1:
+                    for idx, row in df_calculo.iterrows():
+                        if row["jogo"] == st.session_state.jogo_atual["confronto"] and row["jogador_atribuido"] == autor_gol:
+                            df_calculo.at[idx, "ganhou_pelo_jogador"] = True
+                
+                # Atualiza a planilha do Google Sheets com os resultados definitivos
+                conn.update(data=df_calculo)
+                st.success("🏆 Pontuações gravadas diretamente na planilha e salvas no Ranking Geral!")
+                st.rerun()
+            else:
+                st.warning("Nenhum palpite foi feito para computar pontos.")
             
         st.markdown("---")
-        if st.button("🚨 Resetar Todo o Aplicativo (Zerar Tudo)"):
-            st.session_state.participantes = []
+        if st.button("🚨 Resetar Todo o Aplicativo (Zerar Planilha)"):
+            df_limpo = pd.DataFrame(columns=["jogo", "nome", "gols_br", "gols_adv", "jogador_atribuido", "pontos", "acertou_placar_exato", "ganhou_pelo_jogador"])
+            conn.update(data=df_limpo)
             st.session_state.jogo_atual["status_finalizado"] = False
+            st.success("Planilha do Google Sheets limpa com sucesso!")
             st.rerun()
             
     elif senha != "":
