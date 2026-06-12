@@ -54,13 +54,20 @@ if "jogo_atual" not in st.session_state:
         "status_finalizado": False
     }
 
-# Lista oficial de jogadores de linha
+# Lista OFICIAL de jogadores de linha convocados por Carlo Ancelotti (Copa 2026)
 JOGADORES_LINHA = [
-    "Danilo", "Vanderson", "Guilherme Arana", "Abner", "Marquinhos", 
-    "Gabriel Magalhães", "Beraldo", "Murilo", "André", "Bruno Guimarães", 
-    "Gerson", "Lucas Paquetá", "Raphinha", "Rodrygo", "Vinicius Jr.", 
-    "Igor Jesus", "Luiz Henrique", "Savinho", "Andreas Pereira", "Endrick"
+    # Defensores (Laterais e Zagueiros)
+    "Alex Sandro", "Bremer", "Danilo", "Douglas Santos", 
+    "Gabriel Magalhães", "Ibañez", "Léo Pereira", "Marquinhos", "Wesley",
+    
+    # Meio-campistas
+    "Bruno Guimarães", "Casemiro", "Danilo Santos", "Fabinho", "Éderson", "Lucas Paquetá",
+    
+    # Atacantes
+    "Endrick", "Gabriel Martinelli", "Igor Thiago", "Luiz Henrique", 
+    "Matheus Cunha", "Neymar", "Raphinha", "Rayan", "Vini Jr."
 ]
+
 
 # Abas de navegação
 aba_palpites, aba_ranking, aba_admin = st.tabs(["📝 DAR PALPITE", "📊 CLASSIFICAÇÃO", "🔒 ADMINISTRADOR"])
