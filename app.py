@@ -1,25 +1,23 @@
 import streamlit as st
-import random, pandas as pd, requests
+import random, pandas as pd, json, os
 
 st.set_page_config(page_title="Bolão Brasil 2026", layout="centered")
 st.markdown("<style>.stTabs [aria-selected='true'] {background-color: #009c3b !important; color: #ffdf00 !important; font-weight: bold;} div[data-testid='stHeader'] {background-color: #009c3b;}</style>", unsafe_allow_html=True)
 
-try:
-    URL = f"https://airtable.com{st.secrets['airtable']['base_id'].strip()}/{st.secrets['airtable']['table_id'].strip()}"
-    HEADERS = {"Authorization": f"Bearer {st.secrets['airtable']['token'].strip()}", "Content-Type": "application/json"}
-except:
-    st.error("❌ Configure os Secrets no Streamlit!")
-    st.stop()
+ARQUIVO_DB = "palpites.json"
 
 def ler_dados():
-    res = requests.get(URL, headers=HEADERS, timeout=10)
-    if res.status_code == 200:
-        records = res.json().get("records", [])
-        if not records: return pd.DataFrame(columns=["id","jogo","nome","gols_br","gols_adv","jogador_atribuido","pontos","acertou_placar_exato","ganhou_pelo_jogador"])
-        df = pd.DataFrame([dict(r.get("fields", {}), id=r.get("id")) for r in records])
-        for col in ["gols_br", "gols_adv", "pontos"]: df[col] = pd.to_numeric(df.get(col, 0), errors='coerce').fillna(0).astype(int)
-        return df
-    return pd.DataFrame(columns=["id","jogo","nome","gols_br","gols_adv","jogador_atribuido","pontos","acertou_placar_exato","ganhou_pelo_jogador"])
+    if not os.path.exists(ARQUIVO_DB):
+        return pd.DataFrame(columns=["jogo", "nome", "gols_br", "gols_adv", "jogador_atribuido", "pontos", "acertou_placar_exato", "ganhou_pelo_jogador"])
+    try:
+        with open(ARQUIVO_DB, "r", encoding="utf-8") as f:
+            return pd.DataFrame(json.load(f))
+    except:
+        return pd.DataFrame(columns=["jogo", "nome", "gols_br", "gols_adv", "jogador_atribuido", "pontos", "acertou_placar_exato", "ganhou_pelo_jogador"])
+
+def salvar_dados(df):
+    with open(ARQUIVO_DB, "w", encoding="utf-8") as f:
+        json.dump(df.to_dict(orient="records"), f, ensure_ascii=False, indent=4)
 
 JOGOS = {"1ª Rodada: Brasil x Marrocos": "Brasil x Marrocos", "2ª Rodada: Brasil x Haiti": "Brasil x Haiti", "3ª Rodada: Escócia x Brasil": "Escócia x Brasil", "Fase Customizada (Mata-Mata)": "Brasil x Adversário"}
 if "jg_ch" not in st.session_state: st.session_state.jg_ch = "1ª Rodada: Brasil x Marrocos"
@@ -43,23 +41,20 @@ with aba_palpites:
             if st.form_submit_button("🚀 ENVIAR PALPITE") and nome.strip():
                 nl = nome.strip().title()
                 df = ler_dados()
-                if not df.empty and "jogo" in df.columns and ((df["nome"] == nl) & (df["jogo"] == st.session_state.jg_at["confronto"])).any():
+                if not df.empty and ((df["nome"] == nl) & (df["jogo"] == st.session_state.jg_at["confronto"])).any():
                     st.error("❌ Você já cadastrou palpite para este jogo!")
                 else:
                     sorteado = random.choice(JOGADORES)
-                    payload = {"records": [{"fields": {"jogo": st.session_state.jg_at["confronto"], "nome": nl, "gols_br": int(g_br), "gols_adv": int(g_adv), "jogador_atribuido": sorteado, "pontos": 0, "acertou_placar_exato": "False", "ganhou_pelo_jogador": "False"}}]}
-                    res = requests.post(URL, headers=HEADERS, json=payload, timeout=10)
-                    if res.status_code == 200:
-                        st.balloons(); st.success(f"✅ {nl}! Seu jogador da sorte é: {sorteado}")
-                    else:
-                        st.error(f"❌ Erro na tabela do Airtable (Código {res.status_code}). Verifique as colunas.")
+                    novo = pd.DataFrame([{"jogo": st.session_state.jg_at["confronto"], "nome": nl, "gols_br": int(g_br), "gols_adv": int(g_adv), "jogador_atribuido": sorteado, "pontos": 0, "acertou_placar_exato": False, "ganhou_pelo_jogador": False}])
+                    salvar_dados(pd.concat([df, novo], ignore_index=True))
+                    st.balloons(); st.success(f"✅ {nl}! Seu jogador da sorte é: {sorteado}")
 
 with aba_ranking:
     st.markdown("<h2 style='color: #009c3b;'>🏆 Classificação Geral e Resultados</h2>", unsafe_allow_html=True)
     if st.session_state.jg_at["status_finalizado"]:
         st.info(f"Placar Oficial: {st.session_state.jg_at['confronto']} ({st.session_state.jg_at['placar_real_br']}x{st.session_state.jg_at['placar_real_adv']}) | Último gol: {st.session_state.jg_at['autor_ultimo_gol']}")
     df_n = ler_dados()
-    if not df_n.empty and "jogo" in df_n.columns:
+    if not df_n.empty:
         df_f = df_n[df_n["jogo"] == st.session_state.jg_at["confronto"]]
         if not df_f.empty:
             st.markdown("#### ⚽ Palpites da Rodada Ativa")
@@ -92,13 +87,15 @@ with aba_admin:
                     if r["jogo"] == st.session_state.jg_at["confronto"]:
                         ex = (int(r["gols_br"]) == res_br and int(r["gols_adv"]) == res_adv)
                         pt = 25 if ex else (18 if (int(r["gols_br"])-int(r["gols_adv"])) == (res_br-res_adv) and (int(r["gols_br"]) != int(r["gols_adv"])) else (10 if (int(r["gols_br"])>int(r["gols_adv"]) and res_br>res_adv) or (int(r["gols_br"])<int(r["gols_adv"]) and res_br<res_adv) or (int(r["gols_br"])==int(r["gols_adv"]) and res_br==res_adv) else 0))
-                        if ex: ac_ex.append(r["id"])
-                        requests.patch(f"{URL}/{r['id']}", headers=HEADERS, json={"fields": {"pontos": pt, "acertou_placar_exato": str(ex)}})
+                        if ex: ac_ex.append(idx)
+                        df_c.at[idx, "pontos"] = pt
+                        df_c.at[idx, "acertou_placar_exato"] = ex
                 if len(ac_ex) != 1:
                     for idx, r in df_c.iterrows():
                         if r["jogo"] == st.session_state.jg_at["confronto"] and r["jogador_atribuido"] == aut:
-                            requests.patch(f"{URL}/{r['id']}", headers=HEADERS, json={"fields": {"ganhou_pelo_jogador": "True"}})
+                            df_c.at[idx, "ganhou_pelo_jogador"] = True
+                salvar_dados(df_c)
                 st.success("🏆 Pontuações gravadas!"); st.rerun()
         if st.button("🚨 Resetar Todo o Aplicativo"):
-            for idx, r in ler_dados().iterrows(): requests.delete(f"{URL}/{r['id']}", headers=HEADERS)
+            if os.path.exists(ARQUIVO_DB): os.remove(ARQUIVO_DB)
             st.session_state.jg_at["status_finalizado"] = False; st.rerun()
